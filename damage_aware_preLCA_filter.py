@@ -16,6 +16,7 @@ parser.add_argument('--distant_assignments', "-d",help='Detecting taxa with no e
 parser.add_argument('--taxon_filer', "-tf",help='taxon filter', action="store_true")
 parser.add_argument('--acc2taxid', "-t",help='acc2taxid')
 parser.add_argument('--list_of_taxids_to_keep', "-l",help='list of taxids to keep')
+parser.add_argument('--double_stranded', action="store_true")
 args=parser.parse_args()
 
 #ignore C->T and G->A
@@ -33,7 +34,7 @@ def read_taxid():
 
     return(acc2taxid_dict)
 
-def parsing_bam_file():
+def parsing_bam_file_single():
     i=0
     if args.taxon_filer == True:
         taxids = open(args.list_of_taxids_to_keep)
@@ -100,7 +101,44 @@ def parsing_bam_file():
         #    quit()
         #i+=1
 
-def parsing_bam_file_larger_distance():
+def parsing_bam_file_double():
+    i=0
+    if args.taxon_filer == True:
+        taxids = open(args.list_of_taxids_to_keep)
+        taxid_list=set()
+        for item in taxids:
+            taxid_list.add(item.strip())
+        
+    #progress = tqdm(total=None, desc="total reads parsed")
+    #progress_2 = tqdm(total=None, desc="reads with :" + str(args.min_distance) + "-"+ str(args.max_distance) + "%")
+    samfile = pysam.AlignmentFile(args.input, "rb")
+    selected_reads = pysam.AlignmentFile(args.output, "wb", template=samfile)
+    for read in samfile :
+        if args.taxon_filer == True:
+            taxid = acc2taxid_dict[read.reference_name]
+            if taxid not in taxid_list:
+                continue    
+
+        if "I" in read.cigarstring or "D" in read.cigarstring:
+            #progress.update()
+            continue
+
+        read_bases = read.query_sequence[read.query_alignment_start:read.query_alignment_end]
+        ref_bases = read.get_reference_sequence()
+        count=0
+        
+        for read_base, ref_base in zip(read_bases, ref_bases):
+            if read_base != ref_base:
+                if ref_base.upper() == "C" and read_base.upper() == "T":
+                        count+=1
+                if ref_base.upper() == "G" and read_base.upper() == "A":
+                    count+=1
+                    
+        distance=1-((read.get_tag("NM")-count)/len(read.query))
+        if (args.min_distance <= distance <= args.max_distance):
+            selected_reads.write(read)
+
+def parsing_bam_file_larger_distance_single():
     i=0
     #progress = tqdm(total=None, desc="total reads parsed")
     #progress_2 = tqdm(total=None, desc="reads with :" + str(args.min_distance) + "-"+ str(args.max_distance) + "%")
@@ -199,7 +237,11 @@ if __name__ == '__main__':
     if args.distant_assignments != True:
         if args.taxon_filer == True:
             acc2taxid_dict = read_taxid()
-        parsing_bam_file()
-    if args.distant_assignments == True:
+        if args.double_stranded == False:
+            parsing_bam_file_single()
+        if args.double_stranded == True:
+            parsing_bam_file_double()
+
+    if args.distant_assignments == True & args.double_stranded == False:
         print("start looking for distant reads")
-        parsing_bam_file_larger_distance()
+        parsing_bam_file_larger_distance_single()
