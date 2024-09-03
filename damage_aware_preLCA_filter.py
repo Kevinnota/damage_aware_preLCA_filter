@@ -227,7 +227,7 @@ def parsing_bam_file_larger_distance_single():
             continue
 
         
-        progress.update()
+        #progress.update()
         #if i == 1000000:
         #    quit()
         #i+=1
